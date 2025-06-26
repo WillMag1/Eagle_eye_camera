@@ -1,21 +1,13 @@
 /**
- * Image processing utilities for advanced camera features
+ * Image processing utilities matching the exact Python PIL workflow
  */
 
-export interface ImageProcessingOptions {
-  unsharpMask?: {
-    amount: number;
-    radius: number;
-    threshold: number;
-  };
-  ycbcr?: {
-    y: number;
-    cb: number;
-    cr: number;
-  };
-  contrast?: number;
-  brightness?: number;
-  saturation?: number;
+export interface ProcessingParams {
+  unsharpRadius: number;
+  unsharpPercent: number;
+  unsharpThreshold: number;
+  yContrastStrength: number;
+  rgbContrastStrength: number;
 }
 
 /**
@@ -39,13 +31,13 @@ export function ycbcrToRgb(y: number, cb: number, cr: number): [number, number, 
 }
 
 /**
- * Apply unsharp mask filter to image data
+ * Apply unsharp mask filter matching PIL's UnsharpMask
  */
 export function applyUnsharpMask(
   imageData: ImageData,
-  amount: number = 0.8,
-  radius: number = 1.2,
-  threshold: number = 0.05
+  radius: number = 100,
+  percent: number = 100,
+  threshold: number = 0
 ): ImageData {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -58,6 +50,7 @@ export function applyUnsharpMask(
   // Create gaussian blur for unsharp mask
   const blurredData = applyGaussianBlur(imageData, radius);
   const result = new ImageData(imageData.width, imageData.height);
+  const amount = percent / 100;
 
   for (let i = 0; i < imageData.data.length; i += 4) {
     const originalR = imageData.data[i];
@@ -74,10 +67,10 @@ export function applyUnsharpMask(
     const maskG = originalG - blurredG;
     const maskB = originalB - blurredB;
 
-    // Apply threshold
-    if (Math.abs(maskR) < threshold * 255 && 
-        Math.abs(maskG) < threshold * 255 && 
-        Math.abs(maskB) < threshold * 255) {
+    // Apply threshold (PIL style)
+    if (Math.abs(maskR) < threshold && 
+        Math.abs(maskG) < threshold && 
+        Math.abs(maskB) < threshold) {
       result.data[i] = originalR;
       result.data[i + 1] = originalG;
       result.data[i + 2] = originalB;
@@ -235,47 +228,115 @@ export function applyAverageBlending(
 }
 
 /**
- * Process image with all specified options
+ * Process image following the exact Python PIL workflow
  */
 export function processImage(
   canvas: HTMLCanvasElement,
-  options: ImageProcessingOptions
+  params: ProcessingParams = {
+    unsharpRadius: 100,
+    unsharpPercent: 100,
+    unsharpThreshold: 0,
+    yContrastStrength: 0.4,
+    rgbContrastStrength: 2.0
+  }
 ): ImageData {
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas context not available');
 
-  let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  // Get original image data
+  const originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-  // Apply brightness
-  if (options.brightness !== undefined && options.brightness !== 0) {
-    imageData = applyBrightness(imageData, options.brightness);
+  // ---------- IMAGE 1 PROCESSING ----------
+  // Apply UnsharpMask to original image (on RGB)
+  const img1 = applyUnsharpMask(originalImageData, params.unsharpRadius, params.unsharpPercent, params.unsharpThreshold);
+
+  // Convert both original and img1 to YCbCr, then replace Cb and Cr in img1 with those from original
+  const img1_ycbcr = replaceChromaChannels(img1, originalImageData);
+
+  // ---------- IMAGE 2 PROCESSING ----------
+  // Apply Y contrast (0.4 strength) then RGB contrast (2.0)
+  const img2 = applyContrastWorkflow(img1_ycbcr, params.yContrastStrength, params.rgbContrastStrength);
+
+  // ---------- BLENDING ----------
+  // Average blend the two processed images
+  const blended = applyAverageBlending(img1_ycbcr, img2, 0.5);
+
+  return blended;
+}
+
+/**
+ * Replace Cb and Cr channels from img1 with those from original (step from Python code)
+ */
+function replaceChromaChannels(img1: ImageData, original: ImageData): ImageData {
+  const result = new ImageData(img1.width, img1.height);
+
+  for (let i = 0; i < img1.data.length; i += 4) {
+    const r1 = img1.data[i];
+    const g1 = img1.data[i + 1];
+    const b1 = img1.data[i + 2];
+    const a1 = img1.data[i + 3];
+
+    const r_orig = original.data[i];
+    const g_orig = original.data[i + 1];
+    const b_orig = original.data[i + 2];
+
+    // Convert to YCbCr
+    const [y1, _, __] = rgbToYCbCr(r1, g1, b1);
+    const [___, cb_orig, cr_orig] = rgbToYCbCr(r_orig, g_orig, b_orig);
+
+    // Merge Y from img1 with Cb,Cr from original
+    const [newR, newG, newB] = ycbcrToRgb(y1, cb_orig, cr_orig);
+
+    result.data[i] = newR;
+    result.data[i + 1] = newG;
+    result.data[i + 2] = newB;
+    result.data[i + 3] = a1;
   }
 
-  // Apply contrast
-  if (options.contrast !== undefined && options.contrast !== 0) {
-    imageData = applyContrast(imageData, options.contrast);
+  return result;
+}
+
+/**
+ * Apply contrast workflow: Y contrast first, then RGB contrast
+ */
+function applyContrastWorkflow(imageData: ImageData, yContrastStrength: number, rgbContrastStrength: number): ImageData {
+  const result = new ImageData(imageData.width, imageData.height);
+
+  for (let i = 0; i < imageData.data.length; i += 4) {
+    const r = imageData.data[i];
+    const g = imageData.data[i + 1];
+    const b = imageData.data[i + 2];
+    const a = imageData.data[i + 3];
+
+    // Convert to YCbCr
+    let [y, cb, cr] = rgbToYCbCr(r, g, b);
+
+    // Apply Y contrast (0.4 strength means reduce contrast)
+    y = applyContrastToChannel(y, yContrastStrength);
+
+    // Convert back to RGB
+    let [newR, newG, newB] = ycbcrToRgb(y, cb, cr);
+
+    // Apply RGB contrast (2.0 strength)
+    newR = applyContrastToChannel(newR, rgbContrastStrength);
+    newG = applyContrastToChannel(newG, rgbContrastStrength);
+    newB = applyContrastToChannel(newB, rgbContrastStrength);
+
+    result.data[i] = Math.max(0, Math.min(255, newR));
+    result.data[i + 1] = Math.max(0, Math.min(255, newG));
+    result.data[i + 2] = Math.max(0, Math.min(255, newB));
+    result.data[i + 3] = a;
   }
 
-  // Apply saturation
-  if (options.saturation !== undefined && options.saturation !== 0) {
-    imageData = applySaturation(imageData, options.saturation);
-  }
+  return result;
+}
 
-  // Apply YCbCr adjustments
-  if (options.ycbcr) {
-    const { y, cb, cr } = options.ycbcr;
-    if (y !== 0 || cb !== 0 || cr !== 0) {
-      imageData = applyYCbCrAdjustment(imageData, y, cb, cr);
-    }
-  }
-
-  // Apply unsharp mask
-  if (options.unsharpMask) {
-    const { amount, radius, threshold } = options.unsharpMask;
-    if (amount > 0 && radius > 0) {
-      imageData = applyUnsharpMask(imageData, amount, radius, threshold);
-    }
-  }
-
-  return imageData;
+/**
+ * Apply contrast to a single channel (matches PIL's ImageEnhance.Contrast)
+ */
+function applyContrastToChannel(value: number, factor: number): number {
+  // PIL's contrast enhancement: new_value = mean + factor * (old_value - mean)
+  // Using 128 as the mean for 8-bit values
+  const mean = 128;
+  return mean + factor * (value - mean);
 }

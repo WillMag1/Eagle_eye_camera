@@ -6,25 +6,17 @@ import { ProcessingSettings } from "@shared/schema";
 
 interface CameraViewfinderProps {
   onCaptureImage: (imageDataUrl: string) => void;
-  onToggleProcessingPanel: () => void;
   onOpenGallery: () => void;
-  onToggleFlash: () => void;
-  flashEnabled: boolean;
-  processingSettings: ProcessingSettings;
 }
 
 export default function CameraViewfinder({
   onCaptureImage,
-  onToggleProcessingPanel,
   onOpenGallery,
-  onToggleFlash,
-  flashEnabled,
-  processingSettings,
 }: CameraViewfinderProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isRecording, setIsRecording] = useState(false);
-  const { stream, error, startCamera, stopCamera } = useCamera();
+  const { stream, error, startCamera, stopCamera, switchCamera, flashEnabled, toggleFlash } = useCamera();
 
   useEffect(() => {
     startCamera();
@@ -46,12 +38,18 @@ export default function CameraViewfinder({
 
     if (!ctx) return;
 
-    // Set canvas dimensions to match video
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+    // Downscale for faster processing (max width 800px)
+    const maxWidth = 800;
+    const aspectRatio = video.videoHeight / video.videoWidth;
+    const width = Math.min(video.videoWidth, maxWidth);
+    const height = Math.round(width * aspectRatio);
 
-    // Draw video frame to canvas
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Set canvas to downscaled dimensions
+    canvas.width = width;
+    canvas.height = height;
+
+    // Draw and downscale video frame to canvas
+    ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, 0, 0, width, height);
 
     // Get image data and trigger capture
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.8);
@@ -111,7 +109,7 @@ export default function CameraViewfinder({
                 variant="ghost"
                 size="icon"
                 className="p-2 rounded-full bg-black/40 backdrop-blur-sm hover:bg-black/60 camera-button touch-target"
-                onClick={onToggleFlash}
+                onClick={toggleFlash}
               >
                 {flashEnabled ? (
                   <Zap className="h-5 w-5 text-white" />
@@ -165,14 +163,14 @@ export default function CameraViewfinder({
                 </div>
               </Button>
 
-              {/* Processing Panel Toggle */}
+              {/* Camera Switch Button */}
               <Button
                 variant="ghost"
                 size="icon"
                 className="p-3 rounded-full camera-primary shadow-lg hover:camera-primary camera-button touch-target"
-                onClick={onToggleProcessingPanel}
+                onClick={switchCamera}
               >
-                <Settings className="h-5 w-5 text-white" />
+                <Camera className="h-5 w-5 text-white" />
               </Button>
             </div>
           </div>

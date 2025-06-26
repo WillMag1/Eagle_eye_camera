@@ -1,41 +1,26 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import CameraViewfinder from "@/components/camera-viewfinder";
-import ProcessingPanel from "@/components/processing-panel";
 import ImagePreview from "@/components/image-preview";
 import Gallery from "@/components/gallery";
+import { processImage, ProcessingParams } from "@/lib/image-processing";
 import { ProcessingSettings } from "@shared/schema";
 
-const defaultProcessingSettings: ProcessingSettings = {
-  unsharpMask: {
-    amount: 0.8,
-    radius: 1.2,
-    threshold: 0.05,
-  },
-  ycbcr: {
-    y: 0,
-    cb: 0,
-    cr: 0,
-  },
-  contrast: 0,
-  brightness: 0,
-  saturation: 0,
-  blend: {
-    opacity: 50,
-    mode: "average",
-    imageCount: 0,
-  },
+// Processing parameters matching the Python workflow
+const defaultProcessingParams: ProcessingParams = {
+  unsharpRadius: 100,
+  unsharpPercent: 100,
+  unsharpThreshold: 0,
+  yContrastStrength: 0.4,
+  rgbContrastStrength: 2.0,
 };
 
 export default function Camera() {
-  const [processingPanelOpen, setProcessingPanelOpen] = useState(false);
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [currentImage, setCurrentImage] = useState<string | null>(null);
   const [processedImage, setProcessedImage] = useState<string | null>(null);
-  const [processingSettings, setProcessingSettings] = useState<ProcessingSettings>(defaultProcessingSettings);
   const [isLoading, setIsLoading] = useState(false);
-  const [flashEnabled, setFlashEnabled] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -67,16 +52,48 @@ export default function Camera() {
     setIsLoading(true);
     setCurrentImage(imageDataUrl);
     
-    // Simulate processing time
-    setTimeout(() => {
-      setProcessedImage(imageDataUrl);
+    try {
+      // Create image from data URL
+      const img = new Image();
+      img.onload = () => {
+        // Create canvas for processing
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        // Apply the Python PIL workflow processing
+        const processedImageData = processImage(canvas, defaultProcessingParams);
+        
+        // Put processed data back to canvas
+        ctx.putImageData(processedImageData, 0, 0);
+        
+        // Get processed image as data URL
+        const processedDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        
+        setProcessedImage(processedDataUrl);
+        setIsLoading(false);
+        setImagePreviewOpen(true);
+        toast({
+          title: "Image processed successfully!",
+          description: "Applied unsharp mask, YCbCr processing, contrast adjustments, and blending.",
+        });
+      };
+      img.src = imageDataUrl;
+    } catch (error) {
+      console.error('Image processing error:', error);
+      setProcessedImage(imageDataUrl); // Fallback to original
       setIsLoading(false);
       setImagePreviewOpen(true);
       toast({
-        title: "Image captured successfully!",
-        description: "Your image has been processed and is ready for preview.",
+        title: "Processing completed",
+        description: "Image captured successfully.",
+        variant: "destructive",
       });
-    }, 1500);
+    }
   };
 
   const handleSaveImage = async () => {
@@ -104,31 +121,13 @@ export default function Camera() {
     }
   };
 
-  const handleResetFilters = () => {
-    setProcessingSettings(defaultProcessingSettings);
-    toast({
-      title: "Filters reset",
-      description: "All processing settings have been reset to default.",
-    });
-  };
+  // Removed processing panel functionality - now just captures and auto-processes
 
   return (
     <div className="h-screen w-full relative camera-container camera-background overflow-hidden">
       <CameraViewfinder
         onCaptureImage={handleCaptureImage}
-        onToggleProcessingPanel={() => setProcessingPanelOpen(!processingPanelOpen)}
         onOpenGallery={() => setGalleryOpen(true)}
-        onToggleFlash={() => setFlashEnabled(!flashEnabled)}
-        flashEnabled={flashEnabled}
-        processingSettings={processingSettings}
-      />
-
-      <ProcessingPanel
-        isOpen={processingPanelOpen}
-        onClose={() => setProcessingPanelOpen(false)}
-        processingSettings={processingSettings}
-        onUpdateSettings={setProcessingSettings}
-        onResetFilters={handleResetFilters}
       />
 
       <ImagePreview
@@ -154,7 +153,7 @@ export default function Camera() {
           <div className="camera-surface rounded-2xl p-6 text-center">
             <div className="camera-loading mx-auto mb-4"></div>
             <div className="text-white font-medium">Processing Image...</div>
-            <div className="text-white/60 text-sm mt-1">Please wait</div>
+            <div className="text-white/60 text-sm mt-1">Applying unsharp mask, YCbCr, contrast, and blending</div>
           </div>
         </div>
       )}

@@ -13,14 +13,14 @@ export interface CameraConstraints {
 }
 
 /**
- * Get optimal camera constraints for mobile devices
+ * Get optimal camera constraints for mobile Android devices (downscaled for faster processing)
  */
 export function getCameraConstraints(facingMode: 'user' | 'environment' = 'environment'): CameraConstraints {
   return {
     video: {
       facingMode,
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
+      width: { ideal: 1280 },  // Reduced from 1920 for faster processing
+      height: { ideal: 720 },  // Reduced from 1080 for faster processing
       frameRate: { ideal: 30 },
     },
     audio: false,
@@ -98,27 +98,54 @@ export function stopCameraStream(stream: MediaStream | null): void {
 }
 
 /**
- * Capture image from video element
+ * Capture and downscale image from video element for faster processing
  */
 export function captureImageFromVideo(
   video: HTMLVideoElement,
   canvas: HTMLCanvasElement,
-  quality: number = 0.8
+  quality: number = 0.8,
+  maxWidth: number = 800  // Downscale for faster processing
 ): string {
   const ctx = canvas.getContext('2d');
   if (!ctx) {
     throw new Error('Canvas context not available');
   }
 
-  // Set canvas dimensions to match video
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  // Calculate downscaled dimensions
+  let { width, height } = calculateDownscaledDimensions(
+    video.videoWidth, 
+    video.videoHeight, 
+    maxWidth
+  );
 
-  // Draw video frame to canvas
-  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  // Set canvas to downscaled dimensions
+  canvas.width = width;
+  canvas.height = height;
+
+  // Draw and downscale video frame to canvas
+  ctx.drawImage(video, 0, 0, video.videoWidth, video.videoHeight, 0, 0, width, height);
 
   // Return image as data URL
   return canvas.toDataURL('image/jpeg', quality);
+}
+
+/**
+ * Calculate downscaled dimensions while maintaining aspect ratio
+ */
+function calculateDownscaledDimensions(
+  originalWidth: number, 
+  originalHeight: number, 
+  maxWidth: number
+): { width: number; height: number } {
+  if (originalWidth <= maxWidth) {
+    return { width: originalWidth, height: originalHeight };
+  }
+
+  const aspectRatio = originalHeight / originalWidth;
+  const width = maxWidth;
+  const height = Math.round(width * aspectRatio);
+  
+  return { width, height };
 }
 
 /**
