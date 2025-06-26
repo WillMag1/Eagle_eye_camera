@@ -72,12 +72,18 @@ export default function CameraViewfinder({
   if (error) {
     return (
       <div className="absolute inset-0 bg-black flex items-center justify-center">
-        <div className="text-center text-white p-6">
+        <div className="text-center text-white p-6 max-w-sm mx-4">
           <Camera className="h-16 w-16 mx-auto mb-4 text-white/60" />
-          <h2 className="text-xl font-medium mb-2">Camera Access Denied</h2>
-          <p className="text-white/60 text-sm">
-            Please allow camera access to use this app
+          <h2 className="text-xl font-medium mb-2">Camera Access Needed</h2>
+          <p className="text-white/80 text-sm mb-4">
+            Camera access is blocked in the Replit preview environment. 
+            Deploy this app to use it on your Android device.
           </p>
+          <div className="bg-blue-500/20 border border-blue-500/30 rounded-lg p-3">
+            <p className="text-blue-200 text-xs">
+              Click the Deploy button to create a live version that works with your camera.
+            </p>
+          </div>
         </div>
       </div>
     );
