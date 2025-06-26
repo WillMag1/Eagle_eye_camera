@@ -1,0 +1,202 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: hsl(0, 0%, 100%);
+  --foreground: hsl(20, 14.3%, 4.1%);
+  --muted: hsl(60, 4.8%, 95.9%);
+  --muted-foreground: hsl(25, 5.3%, 44.7%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(20, 14.3%, 4.1%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(20, 14.3%, 4.1%);
+  --border: hsl(20, 5.9%, 90%);
+  --input: hsl(20, 5.9%, 90%);
+  --primary: hsl(207, 90%, 54%);
+  --primary-foreground: hsl(211, 100%, 99%);
+  --secondary: hsl(60, 4.8%, 95.9%);
+  --secondary-foreground: hsl(24, 9.8%, 10%);
+  --accent: hsl(60, 4.8%, 95.9%);
+  --accent-foreground: hsl(24, 9.8%, 10%);
+  --destructive: hsl(0, 84.2%, 60.2%);
+  --destructive-foreground: hsl(60, 9.1%, 97.8%);
+  --ring: hsl(20, 14.3%, 4.1%);
+  --radius: 0.5rem;
+  
+  /* Camera app specific colors */
+  --camera-primary: hsl(207, 90%, 54%);
+  --camera-primary-dark: hsl(220, 87%, 37%);
+  --camera-secondary: hsl(0, 0%, 26%);
+  --camera-accent: hsl(14, 100%, 57%);
+  --camera-surface: hsl(0, 0%, 12%);
+  --camera-background: hsl(0, 0%, 7%);
+}
+
+.dark {
+  --background: hsl(240, 10%, 3.9%);
+  --foreground: hsl(0, 0%, 98%);
+  --muted: hsl(240, 3.7%, 15.9%);
+  --muted-foreground: hsl(240, 5%, 64.9%);
+  --popover: hsl(240, 10%, 3.9%);
+  --popover-foreground: hsl(0, 0%, 98%);
+  --card: hsl(240, 10%, 3.9%);
+  --card-foreground: hsl(0, 0%, 98%);
+  --border: hsl(240, 3.7%, 15.9%);
+  --input: hsl(240, 3.7%, 15.9%);
+  --primary: hsl(207, 90%, 54%);
+  --primary-foreground: hsl(211, 100%, 99%);
+  --secondary: hsl(240, 3.7%, 15.9%);
+  --secondary-foreground: hsl(0, 0%, 98%);
+  --accent: hsl(240, 3.7%, 15.9%);
+  --accent-foreground: hsl(0, 0%, 98%);
+  --destructive: hsl(0, 62.8%, 30.6%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --ring: hsl(240, 4.9%, 83.9%);
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    font-family: 'Roboto', sans-serif;
+  }
+  
+  /* Camera app specific styles */
+  .camera-background {
+    background-color: var(--camera-background);
+  }
+  
+  .camera-surface {
+    background-color: var(--camera-surface);
+  }
+  
+  .camera-primary {
+    background-color: var(--camera-primary);
+  }
+  
+  .camera-primary:hover {
+    background-color: var(--camera-primary-dark);
+  }
+  
+  .camera-accent {
+    background-color: var(--camera-accent);
+  }
+}
+
+@layer components {
+  /* Custom slider styles */
+  .camera-slider {
+    @apply w-full h-2 bg-black/40 rounded-lg appearance-none;
+  }
+  
+  .camera-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--camera-primary);
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  
+  .camera-slider::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--camera-primary);
+    cursor: pointer;
+    border: 2px solid white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  }
+  
+  /* Focus styles for accessibility */
+  .camera-button:focus-visible {
+    outline: 2px solid var(--camera-primary);
+    outline-offset: 2px;
+  }
+  
+  /* Prevent zoom on input focus (iOS) */
+  input, select, textarea {
+    font-size: 16px;
+  }
+  
+  /* Custom scrollbar for webkit browsers */
+  ::-webkit-scrollbar {
+    width: 4px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: rgba(255,255,255,0.1);
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.3);
+    border-radius: 2px;
+  }
+  
+  /* Toast animations */
+  .toast-enter {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
+  
+  .toast-enter-active {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 300ms, transform 300ms;
+  }
+  
+  .toast-exit {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  
+  .toast-exit-active {
+    opacity: 0;
+    transform: translateY(-100%);
+    transition: opacity 300ms, transform 300ms;
+  }
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  /* Prevent overscroll bounce */
+  html, body {
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Disable text selection on UI elements */
+  .no-select {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+  }
+  
+  /* Improve touch targets */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Prevent default touch behaviors */
+.camera-container {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Loading spinner */
+.camera-loading {
+  @apply w-12 h-12 border-4 border-t-transparent rounded-full animate-spin;
+  border-color: var(--camera-primary);
+}
