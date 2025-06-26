@@ -5,6 +5,7 @@ import ImagePreview from "@/components/image-preview";
 import Gallery from "@/components/gallery";
 import { processImage, ProcessingParams } from "@/lib/image-processing";
 import { ProcessingSettings } from "@shared/schema";
+import { Link } from "wouter";
 
 // Processing parameters matching the Python workflow
 const defaultProcessingParams: ProcessingParams = {
@@ -157,6 +158,21 @@ export default function Camera() {
           </div>
         </div>
       )}
+      
+      {/* Footer Links */}
+      <div className="absolute bottom-2 left-0 right-0 flex justify-center space-x-4 pointer-events-auto z-10">
+        <Link href="/privacy">
+          <button className="text-white/60 text-xs hover:text-white/90 transition-colors">
+            Privacy Policy
+          </button>
+        </Link>
+        <span className="text-white/40 text-xs">•</span>
+        <Link href="/terms">
+          <button className="text-white/60 text-xs hover:text-white/90 transition-colors">
+            Terms of Service
+          </button>
+        </Link>
+      </div>
     </div>
   );
 }
