@@ -97,8 +97,18 @@ Camera Pro is a modern web-based camera application built with a full-stack arch
 - **Server Build**: `esbuild server/index.ts` → dist/index.js
 - **Bundle Strategy**: External packages for server, bundled client assets
 
-## Changelog
-- June 26, 2025. Initial setup
+## Recent Changes
+- June 26, 2025: Initial camera app setup with Python PIL processing workflow
+- June 26, 2025: Added monetization system with Google AdSense integration
+- June 26, 2025: Enhanced error messaging for camera permissions in Replit environment
+- June 26, 2025: Added comprehensive monetization guide and ad placement strategy
+
+## Monetization Strategy
+- **Google AdSense**: Primary revenue through banner ads in gallery view
+- **Ad Placements**: Non-intrusive locations (gallery bottom, after user actions)
+- **Target Market**: Photography enthusiasts seeking professional mobile processing
+- **Revenue Potential**: $20-1000/month based on traffic (camera apps have high engagement)
+- **Setup Required**: Replace placeholder AdSense IDs after account approval
 
 ## User Preferences
 

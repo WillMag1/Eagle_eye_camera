@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, CheckSquare, Image } from "lucide-react";
+import AdBanner from "./ad-banner";
 
 interface GalleryProps {
   isOpen: boolean;
@@ -64,6 +65,15 @@ export default function Gallery({ isOpen, onClose }: GalleryProps) {
               Captured images will appear here
             </p>
           </div>
+        </div>
+        
+        {/* Ad placement at bottom of gallery */}
+        <div className="mt-6 mb-4 px-2">
+          <AdBanner 
+            adSlot="1234567890"
+            className="w-full"
+            format="horizontal"
+          />
         </div>
       </div>
     </div>
