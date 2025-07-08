@@ -1,342 +1,214 @@
-/**
- * Image processing utilities matching the exact Python PIL workflow
- */
-
 export interface ProcessingParams {
-  unsharpRadius: number;
-  unsharpPercent: number;
-  unsharpThreshold: number;
-  yContrastStrength: number;
-  rgbContrastStrength: number;
+  unsharpRadius: number;    // Use 20
+  unsharpStrength: number;  // Strength for sharpening (like Python 'strength')
+  brightnessFactor: number; // Like your brightness_factor (e.g. 1.1)
+  yContrastFactor: number;  // Y contrast factor (e.g. 0.6)
+  rgbContrastFactor: number;// RGB contrast factor (e.g. 1.7)
 }
 
 /**
- * RGB to YCbCr color space conversion
+ * RGB to YCbCr conversion (same as Python)
  */
 export function rgbToYCbCr(r: number, g: number, b: number): [number, number, number] {
   const y = 0.299 * r + 0.587 * g + 0.114 * b;
-  const cb = -0.169 * r - 0.331 * g + 0.5 * b + 128;
-  const cr = 0.5 * r - 0.419 * g - 0.081 * b + 128;
+  const cb = -0.168736 * r - 0.331264 * g + 0.5 * b + 128;
+  const cr = 0.5 * r - 0.418688 * g - 0.081312 * b + 128;
   return [y, cb, cr];
 }
 
 /**
- * YCbCr to RGB color space conversion
+ * YCbCr to RGB conversion (same as Python)
  */
 export function ycbcrToRgb(y: number, cb: number, cr: number): [number, number, number] {
-  const r = y + 1.402 * (cr - 128);
-  const g = y - 0.344 * (cb - 128) - 0.714 * (cr - 128);
-  const b = y + 1.772 * (cb - 128);
-  return [Math.max(0, Math.min(255, r)), Math.max(0, Math.min(255, g)), Math.max(0, Math.min(255, b))];
+  const cbShifted = cb - 128;
+  const crShifted = cr - 128;
+  const r = y + 1.402 * crShifted;
+  const g = y - 0.344136 * cbShifted - 0.714136 * crShifted;
+  const b = y + 1.772 * cbShifted;
+  return [r, g, b];
 }
 
 /**
- * Apply unsharp mask filter matching PIL's UnsharpMask
+ * Apply unsharp mask on Y channel only, like Python unsharp_mask_y
  */
-export function applyUnsharpMask(
-  imageData: ImageData,
-  radius: number = 100,
-  percent: number = 100,
-  threshold: number = 0
-): ImageData {
+export function unsharpMaskY(yChannel: Float32Array, width: number, height: number, radius: number, strength: number): Float32Array {
+  // For simplicity, create an offscreen canvas, draw Y as grayscale, apply Gaussian blur, then calculate mask
+
+  // Create canvas & context
   const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return imageData;
-
-  canvas.width = imageData.width;
-  canvas.height = imageData.height;
-  ctx.putImageData(imageData, 0, 0);
-
-  // Create gaussian blur for unsharp mask
-  const blurredData = applyGaussianBlur(imageData, radius);
-  const result = new ImageData(imageData.width, imageData.height);
-  const amount = percent / 100;
-
-  for (let i = 0; i < imageData.data.length; i += 4) {
-    const originalR = imageData.data[i];
-    const originalG = imageData.data[i + 1];
-    const originalB = imageData.data[i + 2];
-    const originalA = imageData.data[i + 3];
-
-    const blurredR = blurredData.data[i];
-    const blurredG = blurredData.data[i + 1];
-    const blurredB = blurredData.data[i + 2];
-
-    // Calculate mask
-    const maskR = originalR - blurredR;
-    const maskG = originalG - blurredG;
-    const maskB = originalB - blurredB;
-
-    // Apply threshold (PIL style)
-    if (Math.abs(maskR) < threshold && 
-        Math.abs(maskG) < threshold && 
-        Math.abs(maskB) < threshold) {
-      result.data[i] = originalR;
-      result.data[i + 1] = originalG;
-      result.data[i + 2] = originalB;
-    } else {
-      result.data[i] = Math.max(0, Math.min(255, originalR + amount * maskR));
-      result.data[i + 1] = Math.max(0, Math.min(255, originalG + amount * maskG));
-      result.data[i + 2] = Math.max(0, Math.min(255, originalB + amount * maskB));
-    }
-    result.data[i + 3] = originalA;
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+  
+  // Create ImageData from Y channel grayscale
+  const yImageData = ctx.createImageData(width, height);
+  for (let i = 0; i < yChannel.length; i++) {
+    const val = Math.round(yChannel[i]);
+    yImageData.data[i * 4] = val;
+    yImageData.data[i * 4 + 1] = val;
+    yImageData.data[i * 4 + 2] = val;
+    yImageData.data[i * 4 + 3] = 255;
   }
+  ctx.putImageData(yImageData, 0, 0);
 
-  return result;
-}
-
-/**
- * Apply Gaussian blur to image data
- */
-export function applyGaussianBlur(imageData: ImageData, radius: number): ImageData {
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return imageData;
-
-  canvas.width = imageData.width;
-  canvas.height = imageData.height;
-  ctx.putImageData(imageData, 0, 0);
-
-  // Use canvas filter for gaussian blur (more efficient than manual convolution)
+  // Apply Gaussian blur filter with radius
   ctx.filter = `blur(${radius}px)`;
   ctx.drawImage(canvas, 0, 0);
 
-  return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  // Get blurred data
+  const blurredData = ctx.getImageData(0, 0, width, height).data;
+
+  // Calculate sharpened Y channel: y + strength * (y - blurred)
+  const result = new Float32Array(yChannel.length);
+  for (let i = 0; i < yChannel.length; i++) {
+    const blurredVal = blurredData[i * 4]; // R channel of blurred grayscale
+    let val = yChannel[i] + strength * (yChannel[i] - blurredVal);
+    if (val < 0) val = 0;
+    else if (val > 255) val = 255;
+    result[i] = val;
+  }
+  return result;
 }
 
 /**
- * Apply YCbCr color space manipulation
+ * Apply contrast to a channel array (like Python apply_contrast)
  */
-export function applyYCbCrAdjustment(
+export function applyContrastChannel(channel: Float32Array, factor: number): Float32Array {
+  const mean = channel.reduce((acc, v) => acc + v, 0) / channel.length;
+  const result = new Float32Array(channel.length);
+  for (let i = 0; i < channel.length; i++) {
+    let val = (channel[i] - mean) * factor + mean;
+    if (val < 0) val = 0;
+    else if (val > 255) val = 255;
+    result[i] = val;
+  }
+  return result;
+}
+
+/**
+ * Intelligent brightness scaling on full RGB image, preserving color ratios (like Python)
+ */
+export function applyBrightnessScaling(rgb: Float32Array, width: number, height: number, factor: number): Float32Array {
+  const result = new Float32Array(rgb.length);
+  for (let i = 0; i < width * height; i++) {
+    const r = rgb[i * 3];
+    const g = rgb[i * 3 + 1];
+    const b = rgb[i * 3 + 2];
+    const maxVal = Math.max(r, g, b);
+    if (maxVal === 0) {
+      result[i * 3] = 0;
+      result[i * 3 + 1] = 0;
+      result[i * 3 + 2] = 0;
+      continue;
+    }
+    let scaledMax = maxVal * factor;
+    if (scaledMax > 255) scaledMax = 255;
+    const scale = scaledMax / maxVal;
+
+    result[i * 3] = r * scale;
+    result[i * 3 + 1] = g * scale;
+    result[i * 3 + 2] = b * scale;
+  }
+  return result;
+}
+
+/**
+ * Main process function: 
+ * Takes ImageData, returns new ImageData processed exactly as your Python pipeline
+ */
+export function processImageData(
   imageData: ImageData,
-  yAdjust: number,
-  cbAdjust: number,
-  crAdjust: number
+  params: ProcessingParams
 ): ImageData {
-  const result = new ImageData(imageData.width, imageData.height);
+  const width = imageData.width;
+  const height = imageData.height;
+  const inputData = imageData.data;
 
-  for (let i = 0; i < imageData.data.length; i += 4) {
-    const r = imageData.data[i];
-    const g = imageData.data[i + 1];
-    const b = imageData.data[i + 2];
-    const a = imageData.data[i + 3];
-
-    // Convert to YCbCr
-    let [y, cb, cr] = rgbToYCbCr(r, g, b);
-
-    // Apply adjustments
-    y = Math.max(0, Math.min(255, y + yAdjust));
-    cb = Math.max(0, Math.min(255, cb + cbAdjust));
-    cr = Math.max(0, Math.min(255, cr + crAdjust));
-
-    // Convert back to RGB
-    const [newR, newG, newB] = ycbcrToRgb(y, cb, cr);
-
-    result.data[i] = newR;
-    result.data[i + 1] = newG;
-    result.data[i + 2] = newB;
-    result.data[i + 3] = a;
+  // Step 1: Extract RGB channels to Float32Arrays
+  const rChannel = new Float32Array(width * height);
+  const gChannel = new Float32Array(width * height);
+  const bChannel = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    rChannel[i] = inputData[i * 4];
+    gChannel[i] = inputData[i * 4 + 1];
+    bChannel[i] = inputData[i * 4 + 2];
   }
 
-  return result;
-}
-
-/**
- * Apply contrast adjustment
- */
-export function applyContrast(imageData: ImageData, contrast: number): ImageData {
-  const result = new ImageData(imageData.width, imageData.height);
-  const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
-
-  for (let i = 0; i < imageData.data.length; i += 4) {
-    result.data[i] = Math.max(0, Math.min(255, factor * (imageData.data[i] - 128) + 128));
-    result.data[i + 1] = Math.max(0, Math.min(255, factor * (imageData.data[i + 1] - 128) + 128));
-    result.data[i + 2] = Math.max(0, Math.min(255, factor * (imageData.data[i + 2] - 128) + 128));
-    result.data[i + 3] = imageData.data[i + 3];
+  // Step 2: Convert RGB to YCbCr arrays
+  const yChannel = new Float32Array(width * height);
+  const cbChannel = new Float32Array(width * height);
+  const crChannel = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const [y, cb, cr] = rgbToYCbCr(rChannel[i], gChannel[i], bChannel[i]);
+    yChannel[i] = y;
+    cbChannel[i] = cb;
+    crChannel[i] = cr;
   }
 
-  return result;
-}
+  // Step 3: Unsharp mask on Y channel
+  const ySharp = unsharpMaskY(yChannel, width, height, params.unsharpRadius, params.unsharpStrength);
 
-/**
- * Apply brightness adjustment
- */
-export function applyBrightness(imageData: ImageData, brightness: number): ImageData {
-  const result = new ImageData(imageData.width, imageData.height);
-
-  for (let i = 0; i < imageData.data.length; i += 4) {
-    result.data[i] = Math.max(0, Math.min(255, imageData.data[i] + brightness));
-    result.data[i + 1] = Math.max(0, Math.min(255, imageData.data[i + 1] + brightness));
-    result.data[i + 2] = Math.max(0, Math.min(255, imageData.data[i + 2] + brightness));
-    result.data[i + 3] = imageData.data[i + 3];
+  // Step 4: Combine sharpened Y with original Cb, Cr
+  // Convert back to RGB with sharpened Y but original chroma
+  const rgbAfterSharp = new Float32Array(width * height * 3);
+  for (let i = 0; i < width * height; i++) {
+    const [r, g, b] = ycbcrToRgb(ySharp[i], cbChannel[i], crChannel[i]);
+    rgbAfterSharp[i * 3] = r;
+    rgbAfterSharp[i * 3 + 1] = g;
+    rgbAfterSharp[i * 3 + 2] = b;
   }
 
-  return result;
-}
+  // Step 5: Intelligent brightness scaling preserving ratios
+  const brightScaled = applyBrightnessScaling(rgbAfterSharp, width, height, params.brightnessFactor);
 
-/**
- * Apply saturation adjustment
- */
-export function applySaturation(imageData: ImageData, saturation: number): ImageData {
-  const result = new ImageData(imageData.width, imageData.height);
-  const factor = saturation / 100;
-
-  for (let i = 0; i < imageData.data.length; i += 4) {
-    const r = imageData.data[i];
-    const g = imageData.data[i + 1];
-    const b = imageData.data[i + 2];
-
-    // Calculate luminance
-    const luminance = 0.299 * r + 0.587 * g + 0.114 * b;
-
-    result.data[i] = Math.max(0, Math.min(255, luminance + factor * (r - luminance)));
-    result.data[i + 1] = Math.max(0, Math.min(255, luminance + factor * (g - luminance)));
-    result.data[i + 2] = Math.max(0, Math.min(255, luminance + factor * (b - luminance)));
-    result.data[i + 3] = imageData.data[i + 3];
+  // Step 6: Convert brightness scaled RGB back to YCbCr for Y contrast
+  const yChannel2 = new Float32Array(width * height);
+  const cbChannel2 = new Float32Array(width * height);
+  const crChannel2 = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    const [y, cb, cr] = rgbToYCbCr(
+      brightScaled[i * 3],
+      brightScaled[i * 3 + 1],
+      brightScaled[i * 3 + 2]
+    );
+    yChannel2[i] = y;
+    cbChannel2[i] = cb;
+    crChannel2[i] = cr;
   }
 
-  return result;
-}
+  // Step 7: Apply contrast on Y channel
+  const yContrasted = applyContrastChannel(yChannel2, params.yContrastFactor);
 
-/**
- * Apply average blending between two images
- */
-export function applyAverageBlending(
-  baseImageData: ImageData,
-  blendImageData: ImageData,
-  opacity: number = 0.5
-): ImageData {
-  const result = new ImageData(baseImageData.width, baseImageData.height);
-
-  for (let i = 0; i < baseImageData.data.length; i += 4) {
-    const baseR = baseImageData.data[i];
-    const baseG = baseImageData.data[i + 1];
-    const baseB = baseImageData.data[i + 2];
-    const baseA = baseImageData.data[i + 3];
-
-    const blendR = blendImageData.data[i] || 0;
-    const blendG = blendImageData.data[i + 1] || 0;
-    const blendB = blendImageData.data[i + 2] || 0;
-
-    result.data[i] = Math.round(baseR * (1 - opacity) + (baseR + blendR) / 2 * opacity);
-    result.data[i + 1] = Math.round(baseG * (1 - opacity) + (baseG + blendG) / 2 * opacity);
-    result.data[i + 2] = Math.round(baseB * (1 - opacity) + (baseB + blendB) / 2 * opacity);
-    result.data[i + 3] = baseA;
+  // Step 8: Convert back to RGB from Y (contrasted) + original CbCr
+  const rgbAfterYContrast = new Float32Array(width * height * 3);
+  for (let i = 0; i < width * height; i++) {
+    const [r, g, b] = ycbcrToRgb(yContrasted[i], cbChannel2[i], crChannel2[i]);
+    rgbAfterYContrast[i * 3] = r;
+    rgbAfterYContrast[i * 3 + 1] = g;
+    rgbAfterYContrast[i * 3 + 2] = b;
   }
 
-  return result;
-}
-
-/**
- * Process image following the exact Python PIL workflow
- */
-export function processImage(
-  canvas: HTMLCanvasElement,
-  params: ProcessingParams = {
-    unsharpRadius: 100,
-    unsharpPercent: 100,
-    unsharpThreshold: 0,
-    yContrastStrength: 0.4,
-    rgbContrastStrength: 2.0
+  // Step 9: Apply contrast on RGB channels
+  const rContrasted = new Float32Array(width * height);
+  const gContrasted = new Float32Array(width * height);
+  const bContrasted = new Float32Array(width * height);
+  for (let i = 0; i < width * height; i++) {
+    rContrasted[i] = rgbAfterYContrast[i * 3];
+    gContrasted[i] = rgbAfterYContrast[i * 3 + 1];
+    bContrasted[i] = rgbAfterYContrast[i * 3 + 2];
   }
-): ImageData {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas context not available');
+  const rFinal = applyContrastChannel(rContrasted, params.rgbContrastFactor);
+  const gFinal = applyContrastChannel(gContrasted, params.rgbContrastFactor);
+  const bFinal = applyContrastChannel(bContrasted, params.rgbContrastFactor);
 
-  // Get original image data
-  const originalImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-  // ---------- IMAGE 1 PROCESSING ----------
-  // Apply UnsharpMask to original image (on RGB)
-  const img1 = applyUnsharpMask(originalImageData, params.unsharpRadius, params.unsharpPercent, params.unsharpThreshold);
-
-  // Convert both original and img1 to YCbCr, then replace Cb and Cr in img1 with those from original
-  const img1_ycbcr = replaceChromaChannels(img1, originalImageData);
-
-  // ---------- IMAGE 2 PROCESSING ----------
-  // Apply Y contrast (0.4 strength) then RGB contrast (2.0)
-  const img2 = applyContrastWorkflow(img1_ycbcr, params.yContrastStrength, params.rgbContrastStrength);
-
-  // ---------- BLENDING ----------
-  // Average blend the two processed images
-  const blended = applyAverageBlending(img1_ycbcr, img2, 0.5);
-
-  return blended;
-}
-
-/**
- * Replace Cb and Cr channels from img1 with those from original (step from Python code)
- */
-function replaceChromaChannels(img1: ImageData, original: ImageData): ImageData {
-  const result = new ImageData(img1.width, img1.height);
-
-  for (let i = 0; i < img1.data.length; i += 4) {
-    const r1 = img1.data[i];
-    const g1 = img1.data[i + 1];
-    const b1 = img1.data[i + 2];
-    const a1 = img1.data[i + 3];
-
-    const r_orig = original.data[i];
-    const g_orig = original.data[i + 1];
-    const b_orig = original.data[i + 2];
-
-    // Convert to YCbCr
-    const [y1, _, __] = rgbToYCbCr(r1, g1, b1);
-    const [___, cb_orig, cr_orig] = rgbToYCbCr(r_orig, g_orig, b_orig);
-
-    // Merge Y from img1 with Cb,Cr from original
-    const [newR, newG, newB] = ycbcrToRgb(y1, cb_orig, cr_orig);
-
-    result.data[i] = newR;
-    result.data[i + 1] = newG;
-    result.data[i + 2] = newB;
-    result.data[i + 3] = a1;
+  // Step 10: Compose final ImageData
+  const outputImageData = new ImageData(width, height);
+  for (let i = 0; i < width * height; i++) {
+    outputImageData.data[i * 4] = Math.min(255, Math.max(0, Math.round(rFinal[i])));
+    outputImageData.data[i * 4 + 1] = Math.min(255, Math.max(0, Math.round(gFinal[i])));
+    outputImageData.data[i * 4 + 2] = Math.min(255, Math.max(0, Math.round(bFinal[i])));
+    outputImageData.data[i * 4 + 3] = 255; // fully opaque
   }
 
-  return result;
-}
-
-/**
- * Apply contrast workflow: Y contrast first, then RGB contrast
- */
-function applyContrastWorkflow(imageData: ImageData, yContrastStrength: number, rgbContrastStrength: number): ImageData {
-  const result = new ImageData(imageData.width, imageData.height);
-
-  for (let i = 0; i < imageData.data.length; i += 4) {
-    const r = imageData.data[i];
-    const g = imageData.data[i + 1];
-    const b = imageData.data[i + 2];
-    const a = imageData.data[i + 3];
-
-    // Convert to YCbCr
-    let [y, cb, cr] = rgbToYCbCr(r, g, b);
-
-    // Apply Y contrast (0.4 strength means reduce contrast)
-    y = applyContrastToChannel(y, yContrastStrength);
-
-    // Convert back to RGB
-    let [newR, newG, newB] = ycbcrToRgb(y, cb, cr);
-
-    // Apply RGB contrast (2.0 strength)
-    newR = applyContrastToChannel(newR, rgbContrastStrength);
-    newG = applyContrastToChannel(newG, rgbContrastStrength);
-    newB = applyContrastToChannel(newB, rgbContrastStrength);
-
-    result.data[i] = Math.max(0, Math.min(255, newR));
-    result.data[i + 1] = Math.max(0, Math.min(255, newG));
-    result.data[i + 2] = Math.max(0, Math.min(255, newB));
-    result.data[i + 3] = a;
-  }
-
-  return result;
-}
-
-/**
- * Apply contrast to a single channel (matches PIL's ImageEnhance.Contrast)
- */
-function applyContrastToChannel(value: number, factor: number): number {
-  // PIL's contrast enhancement: new_value = mean + factor * (old_value - mean)
-  // Using 128 as the mean for 8-bit values
-  const mean = 128;
-  return mean + factor * (value - mean);
+  return outputImageData;
 }
