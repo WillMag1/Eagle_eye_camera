@@ -1,9 +1,9 @@
 export interface ProcessingParams {
-  unsharpRadius: number;    // Use 20
-  unsharpStrength: number;  // Strength for sharpening (like Python 'strength')
-  brightnessFactor: number; // Like your brightness_factor (e.g. 1.1)
-  yContrastFactor: number;  // Y contrast factor (e.g. 0.6)
-  rgbContrastFactor: number;// RGB contrast factor (e.g. 1.7)
+  unsharpRadius: number;    // Use 20 (default)
+  unsharpStrength: number;  // Strength for sharpening (like Python 'strength'), e.g. 1.0 (default)
+  brightnessFactor: number; // Like your brightness_factor, e.g. 1.1 (default)
+  yContrastFactor: number;  // Y contrast factor, e.g. 0.6 (default)
+  rgbContrastFactor: number;// RGB contrast factor, e.g. 1.7 (default)
 }
 
 /**
@@ -31,7 +31,13 @@ export function ycbcrToRgb(y: number, cb: number, cr: number): [number, number, 
 /**
  * Apply unsharp mask on Y channel only, like Python unsharp_mask_y
  */
-export function unsharpMaskY(yChannel: Float32Array, width: number, height: number, radius: number, strength: number): Float32Array {
+export function unsharpMaskY(
+  yChannel: Float32Array,
+  width: number,
+  height: number,
+  radius: number,
+  strength: number
+): Float32Array {
   // For simplicity, create an offscreen canvas, draw Y as grayscale, apply Gaussian blur, then calculate mask
 
   // Create canvas & context
@@ -39,7 +45,7 @@ export function unsharpMaskY(yChannel: Float32Array, width: number, height: numb
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d')!;
-  
+
   // Create ImageData from Y channel grayscale
   const yImageData = ctx.createImageData(width, height);
   for (let i = 0; i < yChannel.length; i++) {
@@ -88,7 +94,12 @@ export function applyContrastChannel(channel: Float32Array, factor: number): Flo
 /**
  * Intelligent brightness scaling on full RGB image, preserving color ratios (like Python)
  */
-export function applyBrightnessScaling(rgb: Float32Array, width: number, height: number, factor: number): Float32Array {
+export function applyBrightnessScaling(
+  rgb: Float32Array,
+  width: number,
+  height: number,
+  factor: number
+): Float32Array {
   const result = new Float32Array(rgb.length);
   for (let i = 0; i < width * height; i++) {
     const r = rgb[i * 3];
@@ -113,7 +124,7 @@ export function applyBrightnessScaling(rgb: Float32Array, width: number, height:
 }
 
 /**
- * Main process function: 
+ * Main process function:
  * Takes ImageData, returns new ImageData processed exactly as your Python pipeline
  */
 export function processImageData(
@@ -146,7 +157,13 @@ export function processImageData(
   }
 
   // Step 3: Unsharp mask on Y channel
-  const ySharp = unsharpMaskY(yChannel, width, height, params.unsharpRadius, params.unsharpStrength);
+  const ySharp = unsharpMaskY(
+    yChannel,
+    width,
+    height,
+    params.unsharpRadius,
+    params.unsharpStrength
+  );
 
   // Step 4: Combine sharpened Y with original Cb, Cr
   // Convert back to RGB with sharpened Y but original chroma
@@ -159,7 +176,12 @@ export function processImageData(
   }
 
   // Step 5: Intelligent brightness scaling preserving ratios
-  const brightScaled = applyBrightnessScaling(rgbAfterSharp, width, height, params.brightnessFactor);
+  const brightScaled = applyBrightnessScaling(
+    rgbAfterSharp,
+    width,
+    height,
+    params.brightnessFactor
+  );
 
   // Step 6: Convert brightness scaled RGB back to YCbCr for Y contrast
   const yChannel2 = new Float32Array(width * height);
@@ -204,11 +226,65 @@ export function processImageData(
   // Step 10: Compose final ImageData
   const outputImageData = new ImageData(width, height);
   for (let i = 0; i < width * height; i++) {
-    outputImageData.data[i * 4] = Math.min(255, Math.max(0, Math.round(rFinal[i])));
-    outputImageData.data[i * 4 + 1] = Math.min(255, Math.max(0, Math.round(gFinal[i])));
-    outputImageData.data[i * 4 + 2] = Math.min(255, Math.max(0, Math.round(bFinal[i])));
+    outputImageData.data[i * 4] = Math.min(
+      255,
+      Math.max(0, Math.round(rFinal[i]))
+    );
+    outputImageData.data[i * 4 + 1] = Math.min(
+      255,
+      Math.max(0, Math.round(gFinal[i]))
+    );
+    outputImageData.data[i * 4 + 2] = Math.min(
+      255,
+      Math.max(0, Math.round(bFinal[i]))
+    );
     outputImageData.data[i * 4 + 3] = 255; // fully opaque
   }
 
   return outputImageData;
 }
+
+/**
+ * Resize ImageData proportionally, anchoring image center,
+ * so aspect ratio remains and image is centered in target size
+ */
+export function resizeImageData(
+  input: ImageData,
+  targetWidth: number,
+  targetHeight: number
+): ImageData {
+  // Calculate scale maintaining aspect ratio
+  const scaleX = targetWidth / input.width;
+  const scaleY = targetHeight / input.height;
+  const scale = Math.min(scaleX, scaleY);
+
+  const newWidth = Math.round(input.width * scale);
+  const newHeight = Math.round(input.height * scale);
+
+  // Create offscreen canvas for resizing
+  const canvas = document.createElement('canvas');
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext('2d')!;
+
+  // Fill canvas with black (or transparent) background
+  ctx.fillStyle = 'black';
+  ctx.fillRect(0, 0, targetWidth, targetHeight);
+
+  // Create temporary canvas to draw source ImageData
+  const tempCanvas = document.createElement('canvas');
+  tempCanvas.width = input.width;
+  tempCanvas.height = input.height;
+  const tempCtx = tempCanvas.getContext('2d')!;
+  tempCtx.putImageData(input, 0, 0);
+
+  // Calculate top-left to anchor center
+  const offsetX = Math.floor((targetWidth - newWidth) / 2);
+  const offsetY = Math.floor((targetHeight - newHeight) / 2);
+
+  // Draw scaled image centered on target canvas
+  ctx.drawImage(tempCanvas, 0, 0, input.width, input.height, offsetX, offsetY, newWidth, newHeight);
+
+  // Get resized ImageData
+  return ctx.getImageData(0, 0, targetWidth, targetHeight);
+    }
