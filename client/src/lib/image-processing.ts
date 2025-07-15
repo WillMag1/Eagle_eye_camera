@@ -288,3 +288,4 @@ export function resizeImageData(
   // Get resized ImageData
   return ctx.getImageData(0, 0, targetWidth, targetHeight);
     }
+    
